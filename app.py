@@ -17,8 +17,7 @@ if not os.path.exists(BASE_UPLOAD_FOLDER):
 import os
 
 # ดึงค่าจาก Environment บน Render หรือใช้พอร์ต 6543 เป็นค่าสำรอง
-DATABASE_URL = os.environ.get('DATABASE_URL') or "postgresql://postgres:4Kwn9Z4T04v0AyYd@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
-
+DATABASE_URL = os.environ.get('DATABASE_URL')
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
