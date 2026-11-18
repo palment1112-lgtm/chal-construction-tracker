@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHAL CONSTRUCTION - ระบบติดตามสถานะ BOQ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f4f6f9; color: #333; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); }
+        .table-custom th { background-color: #1e293b !important; color: #fff; font-weight: 500; border: none; font-size: 13px; text-align: center; white-space: nowrap; }
+        .table-custom td { vertical-align: middle; padding: 10px 8px; font-size: 13px; text-align: center; }
+        .btn-primary { background-color: #4f46e5; border-color: #4f46e5; border-radius: 8px; }
+        .btn-primary:hover { background-color: #4338ca; }
+        .form-control, .form-select { font-size: 12px; border-radius: 6px; }
+        .stat-card { border-left: 5px solid #4f46e5; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4 px-4">
+        
+        <!-- ส่วนหัวข้อหลัก -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="fw-bold text-dark mb-1"><i class="bi bi-building-fill-gear text-primary"></i> CHAL CONSTRUCTION : สถานะงานส่งราคา BOQ</h3>
+                <p class="text-muted mb-0">ระบบติดตามและอัปเดตสถานะ Memo, วันที่สรุปราคา, เอกสาร WO และ BOQ รายโครงการ</p>
+            </div>
+            <div>
+                <a href="/export_excel" class="btn btn-success shadow-sm">
+                    <i class="bi bi-file-earmark-excel-fill"></i> ดาวน์โหลดรายงาน Excel
+                </a>
+            </div>
+        </div>
+
+        <!-- แดชบอร์ดสรุปตัวเลขสำคัญ (Summary Cards) -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card stat-card p-3 bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1 fw-medium">รายการ Memo ทั้งหมด</p>
+                            <h3 class="fw-bold text-dark mb-0">{{ stats.total }}</h3>
+                        </div>
+                        <div class="fs-1 text-primary opacity-50"><i class="bi bi-journal-text"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card p-3 bg-white" style="border-left-color: #198754;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1 fw-medium">จบราคาแล้ว</p>
+                            <h3 class="fw-bold text-success mb-0">{{ stats.finished }}</h3>
+                        </div>
+                        <div class="fs-1 text-success opacity-50"><i class="bi bi-check-circle"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card p-3 bg-white" style="border-left-color: #0dcaf0;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1 fw-medium">ได้รับเลขที่ WO แล้ว</p>
+                            <h3 class="fw-bold text-info mb-0">{{ stats.wo_received }}</h3>
+                        </div>
+                        <div class="fs-1 text-info opacity-50"><i class="bi bi-file-earmark-check"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- แถบค้นหา และระบบกรองสถานะขั้นสูง -->
+        <div class="card p-3 mb-4">
+            <form action="/" method="GET" class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <input type="text" class="form-control" placeholder="ค้นหาชื่อโครงการ, เลขที่ Memo หรือรายละเอียด..." name="search" value="{{ search }}">
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" name="filter_status">
+                        <option value="">-- กรองสถานะทั้งหมด --</option>
+                        <option value="รอส่ง BOQ" {% if filter_status == 'รอส่ง BOQ' %}selected{% endif %}>กรองเฉพาะ: รอส่ง BOQ</option>
+                        <option value="รอ WO" {% if filter_status == 'รอ WO' %}selected{% endif %}>กรองเฉพาะ: รอ WO / รอราคา</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button class="btn btn-primary w-100" type="submit"><i class="bi bi-search"></i> ค้นหา</button>
+                    {% if search or filter_status %}
+                        <a href="/" class="btn btn-outline-secondary">รีเซ็ต</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- วนลูปแสดงผลทีละโครงการ -->
+        {% for p in projects %}
+        <div class="card mb-4 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-primary mb-0"><i class="bi bi-building"></i> {{ p.project_name }}</h5>
+                <span class="badge bg-secondary">ทั้งหมด {{ p.memos|length }} รายการ Memo</span>
+            </div>
+
+            <!-- ตารางแสดงรายการ Memo ของโครงการนี้ -->
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered table-custom align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>ลำดับ</th>
+                            <th>PHASE</th>
+                            <th>Memo No.</th>
+                            <th>รายละเอียด</th>
+                            <th>วันที่ส่งราคา</th>
+                            <th>วันที่สรุปราคา</th>
+                            <th>ราคาสุดท้าย (บาท)</th>
+                            <th>เลขที่ WO</th>
+                            <th>ไฟล์ WO</th>
+                            <th>ไฟล์ BOQ</th>
+                            <th>สถานะ BOQ</th>
+                            <th>สถานะเอกสาร</th>
+                            <th>จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in p.memos %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ m.phase }}</span></td>
+                            <td class="fw-semibold text-start">{{ m.memo_no }}</td>
+                            <td class="text-start" style="min-width: 180px;">{{ m.detail }}</td>
+                            <td>{{ m.send_date }}</td>
+                            <td>{{ m.summary_date }}</td>
+                            <td class="fw-bold text-end">{{ m.final_price }}</td>
+                            <td>{{ m.wo_no }}</td>
+                            <td>
+                                {% if m.wo_filename %}
+                                    <a href="/uploads/{{ p.project_name | replace(' ', '_') }}/{{ m.wo_filename }}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 11px;">
+                                        <i class="bi bi-file-earmark-text"></i> ดู WO
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted" style="font-size: 11px;">ไม่มีไฟล์</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if m.filename %}
+                                    <a href="/uploads/{{ p.project_name | replace(' ', '_') }}/{{ m.filename }}" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2" style="font-size: 11px;">
+                                        <i class="bi bi-file-earmark-check"></i> ดู BOQ
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted" style="font-size: 11px;">ไม่มีไฟล์</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if m.boq_status == 'นำส่งแล้ว' %}bg-success{% elif m.boq_status == 'ตรวจราคา' %}bg-info text-dark{% else %}bg-warning text-dark{% endif %}">
+                                    {{ m.boq_status }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge {% if m.doc_status == 'จบราคา' %}bg-primary{% else %}bg-secondary{% endif %}">
+                                    {{ m.doc_status }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex justify-content-center gap-1">
+                                    <!-- ปุ่มเปิด Modal แก้ไข -->
+                                    <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2" data-bs-toggle="modal" data-bs-target="#editModal{{ m.id }}" style="font-size: 11px;">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <!-- ปุ่มลบ Memo -->
+                                    <form action="/memo/delete/{{ m.id }}" method="POST" onsubmit="return confirm('คุณต้องการลบรายการนี้ใช่หรือไม่?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 11px;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Modal สำหรับแก้ไข Memo -->
+                        <div class="modal fade" id="editModal{{ m.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title fw-bold">แก้ไขข้อมูล Memo: {{ m.memo_no }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form action="/memo/edit/{{ m.id }}" method="POST" enctype="multipart/form-data">
+                                        <div class="modal-body text-start">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">PHASE</label>
+                                                    <input type="text" class="form-control" name="phase" value="{{ m.phase }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">Memo No.</label>
+                                                    <input type="text" class="form-control" name="memo_no" value="{{ m.memo_no }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">วันที่ส่งราคา</label>
+                                                    <input type="text" class="form-control" name="send_date" value="{{ m.send_date }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">วันที่สรุปราคา</label>
+                                                    <input type="text" class="form-control" name="summary_date" value="{{ m.summary_date }}">
+                                                </div>
+                                                <div class="col-md-8">
+                                                    <label class="form-label fw-semibold">รายละเอียดงาน</label>
+                                                    <input type="text" class="form-control" name="detail" value="{{ m.detail }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">ราคาสุดท้าย</label>
+                                                    <input type="text" class="form-control" name="final_price" value="{{ m.final_price }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">เลขที่ WO</label>
+                                                    <input type="text" class="form-control" name="wo_no" value="{{ m.wo_no }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold text-primary">อัปเดตไฟล์ WO ใหม่</label>
+                                                    <input type="file" class="form-control form-control-sm" name="wo_file">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold text-success">อัปเดตไฟล์ BOQ ใหม่</label>
+                                                    <input type="file" class="form-control form-control-sm" name="file">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">สถานะ BOQ</label>
+                                                    <select class="form-select" name="boq_status">
+                                                        <option value="นำส่งแล้ว" {% if m.boq_status == 'นำส่งแล้ว' %}selected{% endif %}>นำส่งแล้ว</option>
+                                                        <option value="ตรวจราคา" {% if m.boq_status == 'ตรวจราคา' %}selected{% endif %}>ตรวจราคา</option>
+                                                        <option value="รอส่ง BOQ" {% if m.boq_status == 'รอส่ง BOQ' %}selected{% endif %}>รอส่ง BOQ</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">สถานะเอกสาร</label>
+                                                    <select class="form-select" name="doc_status">
+                                                        <option value="จบราคา" {% if m.doc_status == 'จบราคา' %}selected{% endif %}>จบราคา</option>
+                                                        <option value="รอราคา" {% if m.doc_status == 'รอราคา' %}selected{% endif %}>รอราคา</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                                            <button type="submit" class="btn btn-primary btn-sm">บันทึกการแก้ไข</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <tr>
+                            <td colspan="13" class="text-center text-muted py-3">ยังไม่มีรายการ Memo ในโครงการนี้</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ฟอร์มสำหรับเพิ่ม Memo รายการใหม่เข้าโครงการนี้ -->
+            <div class="bg-light p-3 rounded-3 border">
+                <h6 class="fw-semibold text-secondary mb-2" style="font-size: 14px;"><i class="bi bi-plus-circle text-primary"></i> เพิ่มรายการ Memo ใหม่ให้กับโครงการนี้</h6>
+                <form action="/project/{{ p.id }}/add_memo" method="POST" enctype="multipart/form-data" class="row g-2 align-items-center">
+                    <div class="col-md-1">
+                        <input type="text" class="form-control" name="phase" placeholder="PHASE" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control" name="memo_no" placeholder="Memo No." required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control" name="detail" placeholder="รายละเอียดงาน" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control" name="send_date" placeholder="ว/ด/ป ส่ง">
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control" name="summary_date" placeholder="ว/ด/ป สรุป">
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control" name="final_price" placeholder="ราคาสุดท้าย">
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control" name="wo_no" placeholder="เลขที่ WO">
+                    </div>
+                    <div class="col-md-1">
+                        <select class="form-select" name="boq_status">
+                            <option value="รอส่ง BOQ">รอส่ง BOQ</option>
+                            <option value="ตรวจราคา">ตรวจราคา</option>
+                            <option value="นำส่งแล้ว">นำส่งแล้ว</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <select class="form-select" name="doc_status">
+                            <option value="รอราคา">รอราคา</option>
+                            <option value="จบราคา">จบราคา</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="file" class="form-control form-control-sm" name="wo_file" title="แนบไฟล์ WO">
+                        <span class="text-muted" style="font-size: 9px;">ไฟล์ WO</span>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="file" class="form-control form-control-sm" name="file" title="แนบไฟล์ BOQ">
+                        <span class="text-muted" style="font-size: 9px;">ไฟล์ BOQ</span>
+                    </div>
+                    <div class="col-12 text-end mt-2">
+                        <button type="submit" class="btn btn-sm btn-primary px-4"><i class="bi bi-plus-lg"></i> บันทึกเพิ่ม Memo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
